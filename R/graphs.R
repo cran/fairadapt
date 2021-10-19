@@ -144,7 +144,6 @@ nonId <- function(iv, adj.mat, cfd.mat) {
 
 #' Obtaining the graphical causal model (GCM)
 #'
-#'
 #' @param adj.mat Matrix of class \code{matrix} encoding the relationships in
 #' the causal graph. \code{M[i,j] == 1L} implies the existence of an edge from
 #' node i to node j.
@@ -191,12 +190,11 @@ graphModel <- function(adj.mat, cfd.mat = NULL, res.vars = NULL) {
 
   cfg <- graph_from_adjacency_matrix(cfd.mat)
 
-  e.list <- as_edgelist(cfg, names = F)
+  e.list <- as_edgelist(cfg, names = FALSE)
   curved <- (e.list[, 1] < e.list[, 2]) - 0.5
 
   lty <- ifelse((e.list[, 1] < e.list[, 2]), "dashed", "blank")
   res <- add_edges(res, as.vector(t(e.list)), curved = curved, lty = lty)
-
 
   E(res)$color <- "black"
   E(res)$arrow.size <- 0.35

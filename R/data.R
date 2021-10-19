@@ -38,5 +38,5 @@
 #'     \item{ industry }{industry classification}
 #'     \item{ economic_region }{economic region where the person is employed in the US}
 #' }
-#' @source United States Census Bureau: the American Community Survey (ACS).
+#' @source \url{https://www.census.gov/programs-surveys/acs/microdata/documentation.html}
 "gov_census"
