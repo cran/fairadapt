@@ -1,3 +1,10 @@
+# fairadapt 0.2.2
+Non-breaking changes:
+-Addition of `fairadaptBoot()` functionality, which allows for bootstrap repetitions of the adaptation
+procedure performed by `fairadapt()` (used for uncertainty quantification)
+- adding `print()` and `summary()` methods for all the exported S3 classes in the package
+- improving the documentation for the quantile computation functions
+
 # fairadapt 0.2.1
 Non-breaking changes:
 - `fairTwins()` now has a default `train.id` of `seq_len(nrow(x$train))` (previous default was `1L`)

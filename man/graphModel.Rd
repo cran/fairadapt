@@ -12,7 +12,7 @@ the causal graph. \code{M[i,j] == 1L} implies the existence of an edge from
 node i to node j.}
 
 \item{cfd.mat}{Symmetric matrix of class \code{matrix} encoding the
-bidirected edges in the causal graph. \code{M[i,j] == M[j, i] == 1L}
+bidirected edges in the causal graph. \verb{M[i,j] == M[j, i] == 1L}
 implies the existence of a bidirected edge between nodes i and j.}
 
 \item{res.vars}{A vector of class \code{character} listing all the resolving

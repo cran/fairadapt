@@ -1,18 +1,36 @@
-#' Compute Quantiles using random forests (`ranger` package) in the Quantile
-#' Learning step.
+#' Quantile Engine Constructor for the Quantile Learning step.
+#' 
+#' There are several methods that can be used for the quantile learning step
+#' in the `fairadapt` package. Each of the methods needs a specific 
+#' constructor. The constructor is a function that takes the data (with some 
+#' additional meta-information) and returns an object on which the 
+#' `computeQuants()` generic can be called.
+#' 
+#' Within the package, there are 3 different methods implemented, which use 
+#' quantile regressors based on linear models, random forests and neural 
+#' networks. However, there is additional flexibility and the user can provide
+#' her/his own quantile method. For this, the user needs to write (i) the 
+#' constructor which returns an S3 classed object (see examples below); 
+#' (ii) a method for the `computeQuants()` generic for the S3 class 
+#' returned in (i).
+#' 
+#' @details The `rangerQuants()` function uses random forests 
+#' (`ranger` package) for quantile regression. 
 #'
-#' @param data A \code{data.frame} with data to be used for quantile
+#' @param data A `data.frame` with data to be used for quantile
 #' regression.
-#' @param A.root A \code{logical(1L)} indicating whether the protected
+#' @param A.root A `logical(1L)` indicating whether the protected
 #' attribute `A` is a root node of the causal graph. Used for splitting the
 #' quantile regression.
-#' @param ind A \code{logical} vector of length `nrow(data)`, indicating which
+#' @param ind A `logical` vector of length `nrow(data)`, indicating 
+#' which
 #' samples have the baseline value of the protected attribute.
-#' @param min.node.size,... Forwarded to [ranger::ranger()].
+#' @param min.node.size Forwarded to [ranger::ranger()].
+#' @param ... Forwarded to further methods.
 #'
-#' @return A `ranger` or a `rangersplit` `S3` object, depending on the value
-#' of the `A.root` argument.
-#'
+#' @return A `ranger` or a `rangersplit` S3 object, depending on the 
+#' value of the `A.root` argument, for `rangerQuants()`.
+#' 
 #' @export
 rangerQuants <- function(data, A.root, ind, min.node.size = 20, ...) {
 
@@ -33,21 +51,15 @@ rangerQuants <- function(data, A.root, ind, min.node.size = 20, ...) {
                  keep.inbag = TRUE, min.node.size = min.node.size, ...)
 }
 
-#' Compute Quantiles using linear quantile regression (`quantreg` package) in
-#' the Quantile Learning step.
+#' @details The `linearQuants()` function uses linear quantile regression 
+#' (`quantreg` package) for the Quantile Learning step.
 #'
-#' @param data A \code{data.frame} with data to be used for quantile
-#' regression.
-#' @param A.root A \code{logical(1L)} indicating whether the protected
-#' attribute `A` is a root node of the causal graph. Used for splitting the
-#' quantile regression.
-#' @param ind A \code{logical} vector of length `nrow(data)`, indicating which
-#' samples have the baseline value of the protected attribute.
-#' @param tau,... Forwarded to [quantreg::rq()].
+#' @param tau Forwarded to [quantreg::rq()] or [qrnn::mcqrnn.fit()].
 #'
-#' @return A `rqs` or a `quantregsplit` `S3` object, depending on the value of
-#' the `A.root` argument.
+#' @return A `rqs` or a `quantregsplit` S3 object, depending on the 
+#' value of the `A.root` argument, for `linearQuants()`.
 #'
+#' @rdname rangerQuants
 #' @export
 linearQuants <- function(data, A.root, ind,
                          tau = c(0.001, seq(0.005, 0.995, by = 0.01), 0.999),
@@ -80,20 +92,14 @@ linearQuants <- function(data, A.root, ind,
   quantreg::rq(form, data = data, tau = tau, ...)
 }
 
-#' Compute Quantiles using monotone quantile regression neural networks
-#' (`mcqrnn` package) in the Quantile Learning step.
+#' @details The `mcqrnnQuants()` function uses  monotone quantile 
+#' regression neural networks (`mcqrnn` package) in the Quantile Learning step. 
 #'
-#' @param data A \code{data.frame} with data to be used for quantile
-#' regression.
-#' @param A.root A \code{logical(1L)} indicating whether the protected
-#' attribute `A` is a root node of the causal graph. Used for splitting the
-#' quantile regression.
-#' @param ind A \code{logical} vector of length `nrow(data)`, indicating which
-#' samples have the baseline value of the protected attribute.
-#' @param tau,iter.max,... Forwarded to [qrnn::mcqrnn.fit()].
+#' @param iter.max Forwarded to [qrnn::mcqrnn.fit()].
 #'
-#' @return An `mcqrnn` `S3` object.
+#' @return An ` mcqrnn` S3 object for ` mcqrnnQuants()`.
 #'
+#' @rdname rangerQuants
 #' @export
 mcqrnnQuants <- function(data, A.root, ind, tau = seq(0.005, 0.995, by = 0.01),
                          iter.max = 500, ...) {
@@ -112,24 +118,25 @@ mcqrnnQuants <- function(data, A.root, ind, tau = seq(0.005, 0.995, by = 0.01),
 #'
 #' @param x Object with an associated `computeQuants()` method, to be used for
 #' inferring quantiles.
-#' @param data \code{data.frame} containing samples used in the quantile
+#' @param data `data.frame` containing samples used in the quantile
 #' regression.
-#' @param newdata \code{data.frame} containing counterfactual values for which
+#' @param newdata `data.frame` containing counterfactual values for which
 #' the quantiles need to be inferred.
-#' @param ind A \code{logical} vector of length `nrow(data)`, indicating which
+#' @param ind A `logical` vector of length `nrow(data)`, indicating which
 #' samples have the baseline value of the protected attribute.
 #' @param ... Additional arguments to be passed down to respective method
 #' functions.
 #'
 #' @return A vector of counterfactual values corresponding to `newdata`.
-#'
+#' 
 #' @export
 computeQuants <- function(x, data, newdata, ind, ...) {
   UseMethod("computeQuants", x)
 }
 
 #' @export
-computeQuants.ranger <- function(x, data, newdata, ind, test = FALSE, ...) {
+computeQuants.ranger <- function(x, data, newdata, ind, test = FALSE, 
+                                 emp.only = FALSE, ...) {
 
   # GetQuants
   if (isTRUE(test)) {
@@ -137,6 +144,7 @@ computeQuants.ranger <- function(x, data, newdata, ind, test = FALSE, ...) {
     empirical <- predict(x, data = data[, -1L, drop = FALSE],
                          type = "quantiles", what = identity)
     empirical <- empirical$predictions
+    if (emp.only) return(empirical)
 
   } else {
 
@@ -152,7 +160,7 @@ computeQuants.ranger <- function(x, data, newdata, ind, test = FALSE, ...) {
 
 #' @export
 computeQuants.rangersplit <- function(x, data, newdata, ind, test = FALSE,
-                                      ...) {
+                                      emp.only = FALSE, ...) {
 
   # GetQuants
   if (isTRUE(test)) {
@@ -174,9 +182,10 @@ computeQuants.rangersplit <- function(x, data, newdata, ind, test = FALSE,
 }
 
 #' @export
-computeQuants.rqs <- function(x, data, newdata, ind, ...) {
-
+computeQuants.rqs <- function(x, data, newdata, ind, emp.only = FALSE, ...) {
+  
   empirical <- predict(x, newdata = data[, -1L, drop = FALSE])
+  if (emp.only) return(empirical)
   quantiles <- predict(x, newdata = newdata)
 
   inferQuant(data, empirical, quantiles, ind)
@@ -192,12 +201,14 @@ computeQuants.quantregsplit <- function(x, data, newdata, ind, ...) {
 }
 
 #' @export
-computeQuants.mcqrnnobj <- function(x, data, newdata, ind, ...) {
+computeQuants.mcqrnnobj <- function(x, data, newdata, ind, emp.only = FALSE,
+                                    ...) {
 
   xmat <- matrix(as.numeric(unlist(data[, -1L, drop = FALSE])),
                  nrow = nrow(data))
   empirical <- qrnn::mcqrnn.predict(x = xmat, parms = x)
-
+  if (emp.only) return(empirical)
+  
   newx <- matrix(as.numeric(unlist(newdata)), ncol = ncol(newdata))
   quantiles <- qrnn::mcqrnn.predict(x = newx, parms = x)
 

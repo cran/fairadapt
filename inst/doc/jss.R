@@ -2,17 +2,26 @@
 knitr::opts_chunk$set(echo = TRUE)
 
 library(fairadapt)
-library(data.table)
 library(ggplot2)
 library(ggraph)
-options(tinytex.verbose = TRUE)
+library(ranger)
+library(microbenchmark)
+library(xtable)
 
 options(
   prompt = "R> ",
   continue = "+ ",
   width = 70,
-  useFancyQuotes = FALSE
+  useFancyQuotes = FALSE,
+  tinytex.verbose = TRUE,
+  kableExtra.latex.load_packages = FALSE
 )
+
+quick_build <- !identical(Sys.getenv("NOT_CRAN"), "true") ||
+  isTRUE(as.logical(Sys.getenv("CI"))) ||
+  !identical(Sys.getenv("FAIRADAPT_VIGNETTE_QUICK_BUILD"), "false")
+
+is_on_cran <- !identical(Sys.getenv("NOT_CRAN"), "true")
 
 ## ---- basic---------------------------------------------------------
 n_samp <- 200
@@ -26,12 +35,13 @@ uni_trn <- head(uni_dat, n = n_samp)
 uni_tst <- tail(uni_dat, n = n_samp)
 
 uni_dim <- c(       "gender", "edu", "test", "score")
-uni_adj <- matrix(c(       0,     0,      0,       0,
-                            1,     0,      0,       0,
-                            1,     1,      0,       0,
-                            0,     1,      1,       0),
+uni_adj <- matrix(c(       0,     1,      1,       0,
+                            0,     0,      1,       1,
+                            0,     0,      0,       1,
+                            0,     0,      0,       0),
                   ncol = length(uni_dim),
-                  dimnames = rep(list(uni_dim), 2))
+                  dimnames = rep(list(uni_dim), 2),
+                  byrow = TRUE)
 
 basic <- fairadapt(score ~ ., train.data = uni_trn,
                     test.data = uni_tst, adj.mat = uni_adj,
@@ -60,9 +70,317 @@ ggraph(graphModel(uni_adj), "igraph", algorithm = "sugiyama") +
         axis.ticks = element_blank(), panel.grid = element_blank()) +
   coord_cartesian(clip = "off")
 
+## ----benchmark-quant-methods, echo = FALSE, results = "asis"--------
+
+linebreak <- function(..., align = c("l", "c", "r"), linebreaker = "\n") {
+
+  x <- c(...)
+
+  ifelse(
+    grepl(linebreaker, x, fixed = TRUE),
+    paste0("\\makecell[", match.arg(align), "]{",
+           gsub(linebreaker, "\\\\", x, fixed = TRUE), "}"),
+    x
+  )
+}
+
+bm_cache <- system.file("extdata", "bm_quant.rds", package = "fairadapt")
+
+if (quick_build && file.exists(bm_cache)) {
+
+  bmark <- readRDS(bm_cache)
+
+} else {
+
+  nsamps <- c(200L, 500L)
+
+  bmark <- lapply(
+    c(rangerQuants, mcqrnnQuants, linearQuants),
+    function(quant.method) {
+      lapply(
+        nsamps, function(nsamp) {
+          tim <- microbenchmark(
+            fairadapt(score ~ ., train.data = uni_admission[seq_len(nsamp), ],
+                      test.data = uni_admission[seq.int(nsamp + 1 , 2 * nsamp), ],
+                      adj.mat = uni_adj, prot.attr = "gender",
+                      quant.method = quant.method), times = 5L
+          )$time
+          round(mean(tim) / 10^9, digits = 1L)
+        }
+      )
+    }
+  )
+
+  bmark <- do.call(cbind, bmark)
+
+  colnames(bmark) <- c("Random Forests", "Neural Networks", "Linear Regression")
+  rownames(bmark) <- as.character(nsamps)
+
+  saveRDS(bmark, file.path("..", "inst", "extdata", "bm_quant.rds"))
+}
+
+rownames(bmark) <- paste0("$T_{\\text{uni}}(", rownames(bmark), ")$")
+
+tbl <- data.frame(
+  linebreak(
+    "\\pkg{ranger}", "\\code{rangerQuants}", "$O(np\\log n)$",
+    "$ntrees = 500$\n$mtry = \\sqrt{p}$"
+  ),
+  linebreak(
+    "\\pkg{qrnn}", "\\code{mcqrnnQuants}", "$O(npn_{\\text{epochs}})$",
+    "1 hidden layer\nfully connected\nfeed-forward\nnetwork"
+  ),
+  linebreak(
+    "\\pkg{quantreg}", "\\code{linearQuants}", "$O(p^2n)$",
+    "\\code{\"br\"} method of\nBarrodale and\nRoberts used for\nfitting"
+  )
+)
+
+colnames(tbl) <- colnames(bmark)
+rownames(tbl) <- linebreak(
+  "\\proglang{R}-package", "\\texttt{quant.method}", "complexity",
+  "default\nparameters"
+)
+
+tbl <- rbind(tbl, bmark)
+
+capt <- paste(
+  "Summary table of different quantile regression methods. $n$ is the number",
+  "of samples, $p$ number of covariates, $n_{\\text{epochs}}$ number of",
+  "training epochs for the neural network. $T_{\\text{uni}}(n)$ denotes the",
+  "runtime of different methods on the university admission dataset, with $n$",
+  "training and $n$ testing samples."
+)
+
+print(
+  xtable(tbl, caption = capt, label = "tab:qmethods",
+         align = rep("l", ncol(tbl) + 1L)),
+  booktabs = TRUE,
+  table.placement = "t",
+  sanitize.text.function = identity,
+  comment = FALSE
+)
+
+## ---- quantFit------------------------------------------------------
+fit_qual <- fairadapt(score ~ ., train.data = uni_trn,
+                      adj.mat = uni_adj, prot.attr = "gender",
+                      eval.qfit = 3L)
+
+quantFit(fit_qual)
+
 ## ---- fairtwin-uni--------------------------------------------------
 ft_basic <- fairTwins(basic, train.id = seq_len(n_samp))
 head(ft_basic, n = 3)
+
+## ---- compas--------------------------------------------------------
+cmp_dat <- data("compas", package = "fairadapt")
+cmp_dat <- get(cmp_dat)
+
+cmp_mat <- matrix(0, nrow = ncol(cmp_dat), ncol = ncol(cmp_dat),
+                  dimnames = list(names(cmp_dat), names(cmp_dat)))
+
+cmp_mat[c("race", "sex", "age"),
+        c("juv_fel_count", "juv_misd_count",
+          "juv_other_count", "priors_count",
+          "c_charge_degree", "two_year_recid")] <- 1
+cmp_mat[c("juv_fel_count", "juv_misd_count", "juv_other_count"),
+        c("priors_count", "c_charge_degree", "two_year_recid")] <- 1
+cmp_mat["priors_count", c("c_charge_degree", "two_year_recid")] <- 1
+cmp_mat["c_charge_degree", "two_year_recid"] <- 1
+
+head(cmp_dat)
+
+## ---- compas-boot-quick, eval = quick_build, echo = quick_build-----
+cmp_trn <- tail(cmp_dat, n = 700L)
+cmp_tst <- head(cmp_dat, n = 100L)
+
+n_itr <- 5L
+
+## ---- compas-boot-slow, eval = !quick_build, echo = !quick_build----
+#  cmp_trn <- tail(cmp_dat, n = 6000L)
+#  cmp_tst <- head(cmp_dat, n = 1214L)
+#  
+#  n_itr <- 50L
+
+## ---- compas-boot-finite--------------------------------------------
+set.seed(2022)
+fa_boot_fin <- fairadaptBoot(two_year_recid ~ ., "race", cmp_mat,
+                             cmp_trn, cmp_tst, rand.mode = "finsamp",
+                             n.boot = n_itr)
+
+## ---- compas-boot-quant---------------------------------------------
+set.seed(2022)
+fa_boot_quant <- fairadaptBoot(two_year_recid ~ ., "race", cmp_mat,
+                               cmp_trn, cmp_tst, rand.mode = "quant",
+                               n.boot = n_itr)
+
+## ---- compas-forest-------------------------------------------------
+fit_rf <- function(x) {
+  ranger(factor(two_year_recid) ~ ., cmp_trn[x, ], probability = TRUE)
+}
+
+extract_pred <- function(x) x$predictions[, 2L]
+
+set.seed(2022)
+cmp_rf <- lapply(fa_boot_fin$boot.ind, fit_rf)
+
+pred_fin <- Map(predict, cmp_rf, adaptedData(fa_boot_fin, train = FALSE)) 
+pred_fin <- do.call(cbind, lapply(pred_fin, extract_pred))
+
+pred_quant <- Map(predict, cmp_rf, adaptedData(fa_boot_quant, train = FALSE))
+pred_quant <- do.call(cbind, lapply(pred_quant, extract_pred))
+
+## ---- decision-maker-1----------------------------------------------
+jac_frm <- function(x, modes = "single") {
+
+  jac <- function(a, b) {
+    intersection <- length(intersect(a, b))
+    union <- length(a) + length(b) - intersection
+    intersection / union
+  }
+
+  res <- lapply(
+    seq(quantile(x[, 1L], 0.05), quantile(x[, 1L], 0.95), 0.01),
+    function(tsh) {
+
+      ret <- replicate(100L, {
+        col <- sample(ncol(x), 2L)
+        jac(which(x[, col[1L]] > tsh), which(x[, col[2L]] > tsh))
+      })
+
+      data.frame(tsh = tsh, y = mean(ret), sd = sd(ret),
+                 mode = modes)
+    }
+  )
+
+  do.call(rbind, res)
+}
+
+jac_df <- rbind(jac_frm(pred_fin, "Finite Sample"),
+                jac_frm(pred_quant, "Quantiles"))
+
+## ---- decision-maker-2----------------------------------------------
+ord_ind <- function(x, modes = "single") {
+
+  res <- replicate(5000L, {
+    row <- sample(nrow(x), 2)
+    ord <- mean(x[row[1], ] > x[row[2], ])
+    max(ord, 1 - ord)
+  })
+
+  data.frame(res = res, mode = modes)
+}
+
+ord_df <- rbind(ord_ind(pred_fin, "Finite Sample"),
+                ord_ind(pred_quant, "Quantiles"))
+
+## ---- decision-maker-3----------------------------------------------
+inv_frm <- function(x, modes = "single") {
+
+  gt <- function(x) x[1L] > x[2L]
+
+  res <- replicate(100L, {
+    col <- sample(ncol(x), 2L)
+    prm <- order(x[, col[2L]][order(x[, col[1L]])])
+    sum(combn(prm, 2L, gt)) / choose(length(prm), 2L)
+  })
+
+  data.frame(res = res, mode = modes)
+}
+
+inv_df <- rbind(inv_frm(pred_fin, "Finite Sample"),
+                inv_frm(pred_quant, "Quantiles"))
+
+## ---- decision-maker-4----------------------------------------------
+prb_frm <- function(x, modes = "single") {
+  qnt <- apply(x, 1L, quantile, probs = c(0.05, 0.95))
+  data.frame(width = qnt[2L, ] - qnt[1L, ], mode = modes)
+}
+
+prb_df <- rbind(prb_frm(pred_fin, "Finite Sample"),
+                prb_frm(pred_quant, "Quantiles"))
+
+## ---- compas-dm, echo = FALSE, fig.width = 8, fig.height = 6, fig.cap = "Analyzing uncertainty of predictions in the COMPAS dataset from decision-maker's point of view. Panel A shows how the Jaccard similarity of two repetitions varies depending on the decision threshold. Panel B shows the cumulative distribution of the random variable that indicates whether two randomly selected individuals preserve order (in terms of predicted probabilities) in bootstrap repetitions. Panel C shows the density of the normalized inversion number of between predicted probabilities in bootstrap repetitions. Panel D shows the cumulative distribution function of the 95\\% confidence interval (CI) width for the predicted probability of different individuals.", out.width = "100%"----
+
+p1 <- ggplot(jac_df, aes(x = tsh, y = y, color = mode)) +
+  geom_point() +
+  geom_line() +
+  geom_ribbon(aes(ymin = y - sd, ymax = y + sd, fill = mode, color = mode),
+                alpha = 0.3) +
+  theme_bw() +
+  xlab("Decision threshold") +
+  ylab("Jaccard similarity") +
+  theme(
+    legend.position = c(0.3, 0.3),
+    legend.box.background = element_rect()
+  ) +
+  scale_color_discrete(labels = c(" \"finsamp\" ", " \"quant\" "),
+                      name = "rand.mode") +
+  scale_fill_discrete(labels = c(" \"finsamp\" ", " \"quant\" "),
+                      name = "rand.mode")
+
+p2 <- ggplot(ord_df, aes(x = res, color = mode)) +
+  stat_ecdf() +
+  theme_bw() +
+  xlab("Probability of preserving ordering") +
+  ylab("Cumulative proportion") +
+  theme(
+    legend.position = c(0.3, 0.7),
+    legend.box.background = element_rect()
+  ) +
+  scale_color_discrete(labels = c(" \"finsamp\" ", " \"quant\" "),
+                       name = "rand.mode")
+
+p3 <- ggplot(inv_df, aes(x = res, fill = mode)) +
+  geom_density(alpha = 0.3) +
+  xlim(0, 0.25) +
+  theme_bw() +
+  xlab("Normalized inversion number") +
+  ylab("Density") +
+  theme(
+    legend.position = c(0.3, 0.7),
+    legend.box.background = element_rect()
+  ) +
+  scale_fill_discrete(labels = c(" \"finsamp\" ", " \"quant\" "),
+                      name = "rand.mode")
+
+p4 <- ggplot(prb_df, aes(x = width, color = mode)) +
+  stat_ecdf() +
+  theme_bw() +
+  xlab("95% CI width") +
+  ylab("Cumulative probability") +
+  theme(
+    legend.position = c(0.3, 0.7),
+    legend.box.background = element_rect()
+  ) +
+  scale_x_reverse() +
+  scale_color_discrete(labels = c(" \"finsamp\" ", " \"quant\" "),
+                       name = "rand.mode")
+
+cowplot::plot_grid(
+  p1, p2, p3, p4, ncol = 2L, labels = LETTERS[1:4]
+)
+
+## ---- indiv-uncq----------------------------------------------------
+ind_prb <- data.frame(
+  prob = as.vector(t(pred_quant[seq_len(3), ])),
+  individual = rep(c(1, 2, 3), each = fa_boot_quant$n.boot)
+)
+
+## ---- compas-indiv, echo = FALSE, fig.width = 7, fig.height = 3.5, fig.cap = "Analyzing the spread of individual predictions in the COMPAS dataset, resulting from different bootstrap repetitions.", out.width = "100%"----
+ggplot(ind_prb, aes(x = prob, group = individual,
+                    fill = factor(individual))) +
+  geom_density(alpha = 0.2) +
+  scale_fill_discrete(labels = paste0("#", seq_len(3)),
+                      name = "Individual") +
+  xlab("Probability Estimate") +
+  ylab("Density") +
+  theme_bw() +
+  xlim(0, 1) +
+  theme(
+    legend.position = c(0.7, 0.75),
+    legend.box.background = element_rect()
+  )
 
 ## ---- load-census---------------------------------------------------
 gov_dat <- data("gov_census", package = "fairadapt")
@@ -155,29 +473,42 @@ ggraph(gov_tmp, "igraph", algorithm = "fr") +
         panel.border = element_blank()) +
   coord_cartesian(clip = "off")
 
-## ---- log-sub-------------------------------------------------------
-gov_dat$salary <- log(gov_dat$salary)
-
-n_samp <- 30000
+## ---- log-sub-quick, eval = quick_build, echo = quick_build---------
+n_samp <- 3000
 n_pred <- 5
+
+## ---- log-sub-slow, eval = !quick_build, echo = !quick_build--------
+#  n_samp <- 30000
+#  n_pred <- 5
+
+## ---- census-adapt--------------------------------------------------
+gov_dat$salary <- log(gov_dat$salary)
 
 gov_trn <- head(gov_dat, n = n_samp)
 gov_prd <- tail(gov_dat, n = n_pred)
 
-## ---- before-adapt, echo = FALSE, fig.height = 3, fig.cap = "Visualization of salary densities grouped by employee sex, indicating a shift to higher values for male employees. This uses the US government-census dataset and shows the situation before applying fair data adaption, while Figure \\ref{fig:vis-adapt} presents transformed salary data."----
-ggplot(gov_trn, aes(x = salary, fill = sex)) +
-  geom_density(alpha = 0.4)  +
-  theme_bw() +
-  ggtitle("Salary density by gender")
-
-## ---- census-adapt--------------------------------------------------
 gov_ada <- fairadapt(salary ~ ., train.data = gov_trn,
                      adj.mat = gov_adj, prot.attr = prt)
 
-## ---- vis-adapt, fig.height = 3, fig.cap = "The salary gap between male and female employees of the US government according to the government-census dataset is clearly reduced when comparing raw data (see Figure \\ref{fig:before-adapt}) to transformed salary data as yielded by applying fair data adaption using employee sex as the protected attribute and assuming a causal graph as shown in Figure \\ref{fig:census-graph}."----
-autoplot(gov_ada, when = "after") +
-  theme_bw() +
-  ggtitle("Adapted salary density by gender")
+## ---- census-vis, echo = FALSE, fig.width = 7, fig.height = 3, fig.cap = "Visualization of salary densities grouped by employee sex, before (panel A) and after adaptation (panel B). Panel A indicates a shift towards higher values for male employees. In panel B, after the data is transformed, the gap between groups is reduced.", cache = TRUE----
+
+p1 <- ggplot(gov_trn, aes(x = salary, fill = sex)) +
+  geom_density(alpha = 0.4)  +
+  theme_bw()
+
+p2 <- autoplot(gov_ada, when = "after") +
+  theme_bw() + ggtitle(NULL)
+
+legend_join <- cowplot::get_legend(
+  p1 + guides(color = guide_legend(nrow = 1)) +
+    theme(legend.position = "bottom")
+)
+
+panels <- cowplot::plot_grid(
+  p1 + theme(legend.position = "none"), 
+  p2 + theme(legend.position = "none"), labels = LETTERS[1:2]
+)
+cowplot::plot_grid(panels, legend_join, ncol = 1, rel_heights = c(1, .08))
 
 ## ---- census-predict------------------------------------------------
 predict(gov_ada, newdata = gov_prd)
@@ -223,7 +554,7 @@ semi <- fairadapt(score ~ ., train.data = uni_trn,
                   test.data = uni_tst, adj.mat = uni_adj,
                   cfd.mat = uni_cfd, prot.attr = "gender")
 
-## ---- semi-graph, echo = FALSE, fig.width = 6, fig.height = 3, fig.cap = "Visualization of the causal graphical model also shown in Figure \\ref{fig:semi-markov}, obtained when passing a confounding matrix indicating a bidirectional edge between vertices \\texttt{test} and \\texttt{score} to \\texttt{fairadapt()}. The resulting Semi-Markovian setting is also handled by \\texttt{fairadapt()}, extending the basic Markovian formulation introduced in Section \\ref{markovian-scm-formulation}.", out.width = "60%"----
+## ---- semi-graph, echo = FALSE, fig.width = 6, fig.height = 3, fig.cap = "Visualization of the causal graphical model also shown in Figure \\ref{fig:semi-markov}, obtained when passing a confounding matrix indicating a bidirected edge between vertices \\texttt{test} and \\texttt{score} to \\texttt{fairadapt()}. The resulting Semi-Markovian model can also be handled by \\texttt{fairadapt()}, extending the basic Markovian formulation introduced in Section \\ref{markovian-scm-formulation}.", out.width = "60%"----
 
 set.seed(17)
 

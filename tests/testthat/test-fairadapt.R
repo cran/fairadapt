@@ -20,9 +20,10 @@ test_that("fairadapt", {
   adj.mat <- matrix(adj.mat, nrow = length(vars), ncol = length(vars),
                     byrow = TRUE, dimnames = list(vars, vars))
 
-  fa.nms <- c("adapt.train", "adapt.test", "train", "test", "base.lvl",
-              "base.ind", "formula", "res.vars", "prot.attr", "graph",
-              "q.engine")
+  fa.nms <- c("adapt.train", "adapt.test", "train", "test", "base.lvl", 
+              "attr.lvls", "base.ind", "formula", "res.vars", "prot.attr", 
+              "graph", "quant.method", "adapt.call", "adj.mat", "cfd.mat", 
+              "top.ord", "q.engine")
 
   # random forest
 
@@ -69,6 +70,9 @@ test_that("fairadapt", {
       names(which(adj.mat[, i] == 1L))
     )
   }
+  
+  # quantFit()
+  expect_error(quantFit(ran), regexp = "eval.qfit")
 
   # linear
 
@@ -192,7 +196,7 @@ test_that("fairadapt", {
   charmod <- with_seed(
     203,
     fairadapt(score ~ ., train.data = uni, adj.mat = adj.mat,
-              prot.attr = "gender", seed = 203)
+              prot.attr = "gender", seed = 203, eval.qfit = 3L)
   )
 
   expect_true(is.character(adaptedData(charmod)$test))
@@ -228,6 +232,11 @@ test_that("fairadapt", {
     fairadapt(two_year_recid ~ ., train.data = train, test.data = test,
               adj.mat = adj.mat, prot.attr = "race", seed = 203)
   )
+  
+  expect_output(print(mod), regexp = "Call:")
+  mod.sum <- summary(mod)
+  expect_s3_class(mod.sum, "summary.fairadapt")
+  expect_output(print(mod.sum), regexp = "Call:")
 
   ind <- train[["race"]] == "White"
 
@@ -364,5 +373,5 @@ test_that("fairadapt", {
   expect_lt(mse.lin[["x3"]][[1L]], 100)
   expect_lt(mse.lin[["x3"]][[2L]], 100)
 
-  expect_snapshot_json(mse.lin)
+  expect_snapshot_json(mse.lin, tolerance = 0.2)
 })

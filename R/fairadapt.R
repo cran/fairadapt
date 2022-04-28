@@ -1,7 +1,14 @@
+
+#' @keywords internal
+#' @import stats
+#' @importFrom assertthat assert_that
+#' @aliases fairadapt-package
+"_PACKAGE"
+
 #' Fairadapt
 #'
 #' Implementation of fair data adaptation with quantile preservation
-#' (Plecko & Meinshausen 2019). Uses only plain \code{R}.
+#' (Plecko & Meinshausen 2019). Uses only plain `R`.
 #'
 #' The procedure takes the training and testing data as an input, together with
 #' the causal graph given by an adjacency matrix and the list of resolving
@@ -13,70 +20,75 @@
 #' original paper. Most of the running time is due to the quantile regression
 #' step using the ranger package.
 #'
-#' @param formula Object of class \code{formula} describing the response and
+#' @param formula Object of class `formula` describing the response and
 #' the covariates.
-#' @param prot.attr A value of class \code{character} describing the binary
-#' protected attribute. Must be one of the entries of \code{colnames(adj.mat)}.
-#' @param adj.mat Matrix of class \code{matrix} encoding the relationships in
-#' the causal graph. \code{M[i,j] == 1L} implies the existence of an edge from
+#' @param prot.attr A value of class `character` describing the binary
+#' protected attribute. Must be one of the entries of `colnames(adj.mat)`.
+#' @param adj.mat Matrix of class `matrix` encoding the relationships in
+#' the causal graph. `M[i,j] == 1L` implies the existence of an edge from
 #' node i to node j. Must include all the variables appearing in the formula
-#' object. When the \code{adj.mat} argument is set to \code{NULL}, then the
-#' \code{top.ord} argument has to be supplied.
+#' object. When the `adj.mat` argument is set to `NULL`, then the
+#' `top.ord` argument has to be supplied.
 #' @param train.data,test.data Training data & testing data, both of class
-#' \code{data.frame}. Test data is by default \code{NULL}.
-#' @param cfd.mat Symmetric matrix of class \code{matrix} encoding the
-#' bidirected edges in the causal graph. \code{M[i,j] == M[j, i] == 1L}
+#' `data.frame`. Test data is by default `NULL`.
+#' @param cfd.mat Symmetric matrix of class `matrix` encoding the
+#' bidirected edges in the causal graph. `M[i,j] == M[j, i] == 1L`
 #' implies the existence of a bidirected edge between nodes i and j. Must
 #' include all the variables appearing in the formula object.
-#' @param top.ord A vector of class \code{character} describing the
-#' topological ordering of the causal graph. Default value is \code{NULL},
-#' but this argument must be supplied if \code{adj.mat} is not specified.
+#' @param top.ord A vector of class `character` describing the
+#' topological ordering of the causal graph. Default value is `NULL`,
+#' but this argument must be supplied if `adj.mat` is not specified.
 #' Also must include all the variables appearing in the formula object.
-#' @param res.vars A vector of class \code{character} listing all the resolving
+#' @param res.vars A vector of class `character` listing all the resolving
 #' variables, which should not be changed by the adaption procedure. Default
-#' value is \code{NULL}, corresponding to no resolving variables. Resolving
+#' value is `NULL`, corresponding to no resolving variables. Resolving
 #' variables should be a subset of the descendants of the protected attribute.
 #' @param quant.method A function choosing the method used for quantile
-#' regression. Default value is \code{rangerQuants} (using random forest
-#' quantile regression). Other implemented options are \code{linearQuants} and
-#' \code{mcqrnnQuants}. A custom function can be supplied by the user here,
-#' and the associated method for the S3 generic \code{computeQuants} needs to be
+#' regression. Default value is `rangerQuants` (using random forest
+#' quantile regression). Other implemented options are `linearQuants` and
+#' `mcqrnnQuants`. A custom function can be supplied by the user here,
+#' and the associated method for the S3 generic `computeQuants` needs to be
 #' added.
-#' @param visualize.graph A \code{logical} indicating whether the causal graph
-#' should be plotted upon calling the \code{fairadapt()} function. Default
-#' value is \code{FALSE}.
+#' @param visualize.graph A `logical` indicating whether the causal graph
+#' should be plotted upon calling the `fairadapt()` function. Default
+#' value is `FALSE`.
+#' @param eval.qfit Argument indicating whether the quality of the quantile
+#' regression fit should be computed using cross-validation. Default value is 
+#' `NULL`, but whenever a positive integer value is specified, then it is
+#' interpreted as the number of folds used in the cross-validation procedure.
 #' @param ... Additional arguments forwarded to the function passed as
 #' `quant.method`.
 #'
-#' @return An object of class \code{fairadapt}, containing the original and
+#' @return An object of class `fairadapt`, containing the original and
 #' adapted training and testing data, together with the causal graph and some
 #' additional meta-information.
 #' @examples
-#' uni.adj.mat <- array(0, dim = c(4, 4))
-#' colnames(uni.adj.mat) <- rownames(uni.adj.mat) <-
-#'   c("gender", "edu", "test", "score")
+#' n_samp <- 200
+#' uni_dim <- c(       "gender", "edu", "test", "score")
+#' uni_adj <- matrix(c(       0,     1,      1,       0,
+#'                            0,     0,      1,       1,
+#'                            0,     0,      0,       1,
+#'                            0,     0,      0,       0),
+#'                   ncol = length(uni_dim),
+#'                   dimnames = rep(list(uni_dim), 2),
+#'                   byrow = TRUE)
 #'
-#' uni.adj.mat["gender", c("edu", "test")] <-
-#'   uni.adj.mat["edu", c("test", "score")] <-
-#'   uni.adj.mat["test", "score"] <- 1L
+#' uni_ada <- fairadapt(score ~ .,
+#'   train.data = head(uni_admission, n = n_samp),
+#'   test.data = tail(uni_admission, n = n_samp),
+#'   adj.mat = uni_adj,
+#'   prot.attr = "gender"
+#' )
 #'
-#' FA <- fairadapt(score ~ .,
-#'   train.data = uni_admission[1:100, ],
-#'   test.data = uni_admission[101:150, ],
-#'   adj.mat = uni.adj.mat, prot.attr = "gender")
+#' uni_ada
 #'
-#' FA
-#'
-#' @author Drago Plecko
 #' @references
 #' Plecko, D. & Meinshausen, N. (2019).
-#' Fair Data Adaptation with Quantile Preservation \cr
-#' @import stats
-#' @importFrom assertthat assert_that
+#' Fair Data Adaptation with Quantile Preservation
 #' @export
 fairadapt <- function(formula, prot.attr, adj.mat, train.data, test.data = NULL,
   cfd.mat = NULL, top.ord = NULL, res.vars = NULL, quant.method = rangerQuants,
-  visualize.graph = FALSE, ...) {
+  visualize.graph = FALSE, eval.qfit = NULL, ...) {
 
   if (missing(adj.mat)) {
     adj.mat <- NULL
@@ -117,6 +129,7 @@ fairadapt <- function(formula, prot.attr, adj.mat, train.data, test.data = NULL,
   # construct the initial version of adapted data
   adapt.data <- org.data
   base.lvl <- levels(org.data[, prot.attr])[1L]
+  attr.lvls <- levels(org.data[, prot.attr])
   base.ind <- org.data[, prot.attr] == base.lvl
   adapt.data[, prot.attr] <- factor(base.lvl,
                                     levels = levels(org.data[, prot.attr]))
@@ -205,6 +218,8 @@ fairadapt <- function(formula, prot.attr, adj.mat, train.data, test.data = NULL,
           org.data[, curr.var], levels = catOrder(org.data[row.idx, 1L],
                                                   org.data[row.idx, curr.var])
         )
+      } else if (is.integer(org.data[, curr.var])) {
+        q.engine[[curr.var]][["discrete"]] <- discrete <- 1L
       } else {
         org.data[, curr.var] <- factor(org.data[, curr.var])
       }
@@ -230,6 +245,29 @@ fairadapt <- function(formula, prot.attr, adj.mat, train.data, test.data = NULL,
 
     adapt.data[!base.ind & row.idx, curr.var] <-
       computeQuants(object, qr.data, cf.parents, base.ind[row.idx])
+    
+    if (!is.null(eval.qfit)) {
+      eval.qfit <- as.integer(eval.qfit)
+      assert_that(eval.qfit > 1L, 
+                  msg = "`eval.qfit` argument must be a positive integer.")
+      # split into folds
+      folds <- as.integer(cut(seq_row(qr.data), breaks = eval.qfit))
+      q.fold <- c()
+      for (fold in seq_len(eval.qfit)) {
+        fold.ind <- folds == fold
+        obj <- quant.method(qr.data[!fold.ind, ], A.root = FALSE, ind = NULL, 
+                            ...)
+
+        q.fold <- rbind(
+          q.fold, computeQuants(obj, qr.data[fold.ind, ], newdata = NULL, 
+                                ind = NULL, test = TRUE, emp.only = TRUE)
+        )
+        
+      }
+      
+      q.engine[[curr.var]][["qfit.score"]] <- qfitScore(qr.data[[curr.var]], 
+                                                        q.fold)
+    }
 
     # check if there exists a resolving ancestor
     ancestors <- getAncestors(curr.var, adj.mat, top.ord)
@@ -240,33 +278,49 @@ fairadapt <- function(formula, prot.attr, adj.mat, train.data, test.data = NULL,
       adapt.data[row.idx, curr.var] <-
         marginalMatching(adapt.data[row.idx, curr.var], base.ind[row.idx])
     }
-
+    
     # if discrete, recode back to discrete or factor
     if (discrete) {
 
-      adapt.data[, curr.var] <-
-        decodeDiscrete(adapt.data[row.idx, curr.var], unique.values, type,
-                      full.len)
-
-      org.data[, curr.var] <-
-        decodeDiscrete(org.data[row.idx, curr.var], unique.values, type,
-                       full.len)
+      if (is.integer(discrete)) {
+        
+        adapt.data[, curr.var] <- as.integer(round(adapt.data[, curr.var]))
+        org.data[, curr.var] <- as.integer((round(org.data[, curr.var])))
+        
+      } else {
+        adapt.data[, curr.var] <-
+          decodeDiscrete(adapt.data[row.idx, curr.var], unique.values, type,
+                         full.len)
+        org.data[, curr.var] <-
+          decodeDiscrete(org.data[row.idx, curr.var], unique.values, type,
+                         full.len)
+      }
+      
     }
 
   }
 
-  structure(list(
-    adapt.train = adapt.data[seq_len(train.len), ],
-    adapt.test = adapt.data[-seq_len(train.len), -1L],
-    train = train.data,
-    test = test.data,
-    base.lvl = base.lvl,
-    base.ind = base.ind,
-    formula = formula,
-    res.vars = res.vars,
-    prot.attr = prot.attr,
-    graph = ig,
-    q.engine = q.engine
-  ), class = "fairadapt")
+  structure(
+    list(
+      adapt.train = adapt.data[seq_len(train.len), ],
+      adapt.test = adapt.data[-seq_len(train.len), -1L],
+      train = train.data,
+      test = test.data,
+      base.lvl = base.lvl,
+      attr.lvls = attr.lvls,
+      base.ind = base.ind,
+      formula = formula,
+      res.vars = res.vars,
+      prot.attr = prot.attr,
+      graph = ig,
+      quant.method = deparse(substitute(quant.method)),
+      adapt.call = match.call(),
+      adj.mat = adj.mat,
+      cfd.mat = cfd.mat,
+      top.ord = top.ord,
+      q.engine = q.engine
+    ),
+    class = "fairadapt"
+  )
 
 }

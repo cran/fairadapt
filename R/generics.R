@@ -53,42 +53,126 @@ autoplot.fairadapt <- function(x, when = "after", ...) {
   )
 }
 
-#' @importFrom graphics lines plot polygon
 #' @export
 print.fairadapt <- function(x, ...) {
 
-  cat("Fairadapt result\n\n")
-  cat("Formula:\n", deparse(x$formula), "\n\n")
-  cat("Protected attribute:                 ", x$prot.attr, "\n")
-  cat("Protected attribute levels:          ",
-      paste(sort(unique(x$train[[x$prot.attr]])), collapse = ", "), "\n")
-
-  if(!is.null(x$res.vars)) {
-    cat("Resolving variables:                 ",
-        paste(x$res.vars, collapse = ", "), "\n")
+  cat("\nCall:\n", paste(deparse(x$adapt.call), sep = "\n", collapse = "\n"), 
+      "\n\n", sep = "")
+  
+  if (!is.null(x$adj.mat)) {
+    vars <- setdiff(getDescendants(x$prot.attr, x$adj.mat), x$res.vars)
+  } else {
+    attr.idx <- which(x$top.ord == x$prot.attr)
+    if (attr.idx < length(x$top.ord)) {
+      vars <- x$top.ord[seq.int(attr.idx + 1L, length(x$top.ord))]
+    } else {
+      vars <- NULL
+    }
   }
 
-  cat("Number of training samples:          ", nrow(x$adapt.train), "\n")
-  cat("Number of test samples:              ", nrow(x$adapt.test), "\n")
-  cat("Number of independent variables:     ", ncol(x$adapt.train) - 1L, "\n")
+  if (!is.null(vars)) {
+    cat("\nAdapting variables:\n  ", paste0(vars, collapse = ", "), "\n",
+        sep = "")
+  } else {
+    cat("\nNo adapted variables\n")
+  }
+  
+  cat("\nBased on protected attribute", x$prot.attr, "\n")
 
-  seq_row <- seq_len(nrow(x$train))
+  cat("\n  AND\n")
 
-  cat("Total variation (before adaptation): ",
-    mean(x$train[[1L]][x$base.ind[seq_row]]) -
-      mean(x$train[[1L]][!x$base.ind[seq_row]]),
-    "\n"
-  )
+  if (is.null(x$adj.mat)) {
 
-  cat("Total variation (after adaptation):  ",
-    mean(x$adapt.train[[1L]][x$base.ind[seq_row]]) -
-      mean(x$adapt.train[[1L]][!x$base.ind[seq_row]]),
-    "\n"
-  )
+    cat("\nBased on topological order:\n  ", x$top.ord, sep = "")
+
+  } else {
+
+    mat <- rbind(colnames(x$adj.mat), x$adj.mat)
+    mat <- apply(mat, 2L, format, justify = "right")
+    mat <- cbind(format(c("", rownames(x$adj.mat))), mat)
+
+    cat("\nBased on causal graph:\n")
+    cat(apply(mat, 1L, paste, collapse = " "), sep = "\n")
+    cat("\n")
+  }
 
   invisible(x)
 }
 
+#' @export
+summary.fairadapt <- function(object, ...) {
+  
+  seq_row <- seq_len(nrow(object$train))
+  
+  tv.start <- mean(object$train[[1L]][object$base.ind[seq_row]]) -
+    mean(object$train[[1L]][!object$base.ind[seq_row]])
+  
+  tv.end <- mean(object$adapt.train[[1L]][object$base.ind[seq_row]]) -
+    mean(object$adapt.train[[1L]][!object$base.ind[seq_row]])
+  
+  # FIXME: determine from top.ord?
+  adapt.vars <- setdiff(
+    getDescendants(object$prot.attr, object$adj.mat),
+    object$res.vars
+  )
+  
+  structure(
+    list(
+      formula = object$formula,
+      prot.attr = object$prot.attr,
+      attr.lvls = object$attr.lvls,
+      res.vars = object$res.vars,
+      train.samp = nrow(object$adapt.train),
+      test.samp = nrow(object$adapt.test),
+      adapt.vars = adapt.vars,
+      tv.start = tv.start,
+      tv.end = tv.end,
+      quant.method = object$quant.method
+    ),
+    class = "summary.fairadapt"
+  )
+}
+
+#' @export
+print.summary.fairadapt <- function(x,
+                                    digits = max(3L, getOption("digits") - 3L),
+                                    ...) {
+  
+  cat0("\nCall:\n", paste(deparse(x$adapt.call), sep = "\n", collapse = "\n"),
+       "\n\n")
+
+  cat0("Protected attribute:                 ", x$prot.attr, "\n")
+  cat0("Protected attribute levels:          ",
+       paste(sort(x$attr.lvls), collapse = ", "), "\n")
+
+  if (!is.null(x$adapt.vars)) {
+    cat0("Adapted variables:                   ",
+         paste(x$adapt.vars, collapse = ", "), "\n")
+  }
+
+  if(!is.null(x$res.vars)) {
+    cat0("Resolving variables:                 ",
+         paste(x$res.vars, collapse = ", "), "\n")
+  }
+
+  cat0("\n")
+
+  cat0("Number of training samples:          ", x$train.samp, "\n")
+  cat0("Number of test samples:              ", x$test.samp, "\n")
+  cat0("Quantile method:                     ", x$quant.method, "\n")
+
+  cat0("\n")
+
+  cat0("Total variation (before adaptation): ",
+       format(x$tv.start, digits = digits), "\n")
+
+  cat0("Total variation (after adaptation):  ",
+       format(x$tv.end, digits = digits), "\n")
+    
+  invisible(x)
+}
+
+#' @importFrom graphics lines plot polygon
 #' @importFrom graphics barplot text
 #' @export
 plot.fairadapt <- function(x, when = "after", ...) {
@@ -155,7 +239,7 @@ plot.fairadapt <- function(x, when = "after", ...) {
 
 #' Visualize Graphical Causal Model
 #'
-#' @param x Object of class \code{fairadapt}, a result of an adaptation
+#' @param x Object of class `fairadapt`, a result of an adaptation
 #' procedure.
 #' @param ... Additional arguments passed to the graph plotting function.
 #' @export
@@ -168,50 +252,69 @@ visualizeGraph.fairadapt <- function(x, ...) plot(x$graph, ...)
 
 #' Convenience function for returning adapted data
 #'
-#' @param x Object of class \code{fairadapt}, a result of an adaptation
-#' procedure.
+#' @param x Object of class `fairadapt` or `fairadaptBoot`, a result of an 
+#' adaptation procedure.
 #' @param train A logical indicating whether train data should be returned.
-#' Defaults to \code{TRUE}. If \code{FALSE}, test data is returned.
+#' Defaults to `TRUE`. If `FALSE`, test data is returned.
+#' @return Either a `data.frame` when called on an `fairadapt` object, or a `list`
+#' of `data.frame`s with the adapted data of length `n.boot`, when called on a
+#' `fairadaptBoot` object.
+#' 
 #' @export
 adaptedData <- function(x, train = TRUE) {
   UseMethod("adaptedData", x)
 }
 
+#' @rdname adaptedData
 #' @export
 adaptedData.fairadapt <- function(x, train = TRUE) {
 
   if (train) x[["adapt.train"]] else x[["adapt.test"]]
+}
 
+#' @rdname adaptedData
+#' @export
+adaptedData.fairadaptBoot <- function(x, train = TRUE) {
+  
+  if (train && !x$keep.object) {
+    stop("Adapted training data not available when `keep.object` = FALSE.")
+  } else if (train && x$keep.object) {
+    lapply(x$fairadapt, `[[`, "adapt.train")
+  } else x[["adapt.test"]]
 }
 
 #' Fair Twin Inspection convenience function.
 #'
-#' @param x Object of class \code{fairadapt}, a result of an adaptation
+#' @param x Object of class `fairadapt`, a result of an adaptation
 #' procedure.
 #' @param train.id A vector of indices specifying which rows of the training
 #' data should be displayed.
 #' @param test.id A vector of indices specifying which rows of the test
 #' data should be displayed.
-#' @param cols A \code{character} vector, subset of \code{names(train.data)},
+#' @param cols A `character` vector, subset of `names(train.data)`,
 #' which specifies which subset of columns is to be displayed in the result.
-#' @return A \code{data.frame}, containing the original and adapted values
-#' of the requested individuals. Adapted columns have \code{_adapted} appended
+#' @return A `data.frame`, containing the original and adapted values
+#' of the requested individuals. Adapted columns have `_adapted` appended
 #' to their original name.
 #' @examples
-#' uni.adj.mat <- array(0, dim = c(4, 4))
-#' colnames(uni.adj.mat) <- rownames(uni.adj.mat) <-
-#'   c("gender", "edu", "test", "score")
+#' n_samp <- 200
+#' uni_dim <- c(       "gender", "edu", "test", "score")
+#' uni_adj <- matrix(c(       0,     1,      1,       0,
+#'                            0,     0,      1,       1,
+#'                            0,     0,      0,       1,
+#'                            0,     0,      0,       0),
+#'                   ncol = length(uni_dim),
+#'                   dimnames = rep(list(uni_dim), 2),
+#'                   byrow = TRUE)
 #'
-#' uni.adj.mat["gender", c("edu", "test")] <-
-#'   uni.adj.mat["edu", c("test", "score")] <-
-#'   uni.adj.mat["test", "score"] <- 1L
+#' uni_ada <- fairadapt(score ~ .,
+#'   train.data = head(uni_admission, n = n_samp),
+#'   test.data = tail(uni_admission, n = n_samp),
+#'   adj.mat = uni_adj,
+#'   prot.attr = "gender"
+#' )
 #'
-#' FA <- fairadapt(score ~ .,
-#'   train.data = uni_admission[1:100, ],
-#'   test.data = uni_admission[101:150, ],
-#'   adj.mat = uni.adj.mat, prot.attr = "gender")
-#'
-#' fairTwins(FA, train.id = 1:5)
+#' fairTwins(uni_ada, train.id = 1:5)
 #' @export
 fairTwins <- function(x, train.id = seq_len(nrow(x$train)), test.id = NULL,
                       cols = NULL) {
@@ -268,6 +371,38 @@ fairTwins.fairadapt <- function(x, train.id = seq_len(nrow(x$train)),
   res[, col.ord]
 }
 
+
+#' Prediction function for new data from a saved `fairadapt` object.
+#'
+#' @details The `newdata` argument should be compatible with `adapt.test`
+#' argument that was used when constructing the `fairadapt` object. In
+#' particular, `newdata` should contain column names that appear in the `formula`
+#' argument that was used when calling `fairadapt()` (apart from the outcome 
+#' variable on the LHS of the formula).
+#' 
+#' @param object Object of class `fairadapt`, a result of an adaptation
+#' procedure.
+#' @param newdata A `data.frame` containing the new data.
+#' @param ... Additional arguments forwarded to `computeQuants()`.
+#' @return A `data.frame` containing the adapted version of the new data.
+#' @examples
+#' n_samp <- 200
+#' uni_dim <- c(       "gender", "edu", "test", "score")
+#' uni_adj <- matrix(c(       0,     1,      1,       0,
+#'                            0,     0,      1,       1,
+#'                            0,     0,      0,       1,
+#'                            0,     0,      0,       0),
+#'                   ncol = length(uni_dim),
+#'                   dimnames = rep(list(uni_dim), 2),
+#'                   byrow = TRUE)
+#'
+#' uni_ada <- fairadapt(score ~ .,
+#'   train.data = head(uni_admission, n = n_samp),
+#'   adj.mat = uni_adj,
+#'   prot.attr = "gender"
+#' )
+#'
+#' predict(object = uni_ada, newdata = tail(uni_admission, n = n_samp))
 #' @export
 predict.fairadapt <- function(object, newdata, ...) {
 
@@ -277,7 +412,7 @@ predict.fairadapt <- function(object, newdata, ...) {
   engine <- object$q.engine
 
   newdata[, object$prot.attr] <- relevel(
-    as.factor(newdata[, object$prot.attr]),
+    factor(newdata[, object$prot.attr], levels = object$attr.lvls),
     ref = object$base.lvl
   )
 
@@ -298,12 +433,15 @@ predict.fairadapt <- function(object, newdata, ...) {
     if (engine[[var]][["discrete"]]) {
 
       assert_that(
-        all(newdata[, var] %in% engine[[var]][["unique.values"]]),
+        all(newdata[, var] %in% engine[[var]][["unique.values"]]) |
+          is.integer(engine[[var]][["discrete"]]),
         msg = paste0("New, unseen values of variable ", var, ". Disallowed.")
       )
-
-      newdata[, var] <- factor(newdata[, var],
-                               levels = engine[[var]][["unique.values"]])
+      
+      if (is.logical(engine[[var]][["discrete"]])) {
+        newdata[, var] <- factor(newdata[, var],
+                                 levels = engine[[var]][["unique.values"]])
+      }
 
       newdata[, var] <- as.integer(newdata[, var]) +
         runif(length(newdata[, var]), -0.5, 0.5)
@@ -312,25 +450,81 @@ predict.fairadapt <- function(object, newdata, ...) {
     }
 
     # ii) computeQuants()
-    adapt[!base.ind, var] <-
-      computeQuants(
-        engine[[var]][["object"]],
-        newdata[, c(var, engine[[var]][["parents"]]), drop = FALSE],
-        adapt[!base.ind, engine[[var]][["parents"]], drop = FALSE],
-        base.ind, test = TRUE
-      )
+    if (sum(!base.ind) > 0L) {
+      adapt[!base.ind, var] <-
+        computeQuants(
+          engine[[var]][["object"]],
+          newdata[, c(var, engine[[var]][["parents"]]), drop = FALSE],
+          adapt[!base.ind, engine[[var]][["parents"]], drop = FALSE],
+          base.ind, test = TRUE, ...
+        )
+    }
 
     # iii) decode discrete
     if (engine[[var]][["discrete"]]) {
-
-      newdata[, var] <-
-        decodeDiscrete(newdata[, var], engine[[var]][["unique.values"]],
-                       engine[[var]][["type"]], length(newdata[, var]))
-      adapt[, var] <-
-        decodeDiscrete(adapt[, var], engine[[var]][["unique.values"]],
-                       engine[[var]][["type"]], length(adapt[, var]))
+      
+      if (is.integer(engine[[var]][["discrete"]])) {
+        newdata[, var] <- as.integer(round(newdata[, var]))
+        adapt[, var] <- as.integer(round(adapt[, var]))
+      } else {
+        newdata[, var] <-
+          decodeDiscrete(newdata[, var], engine[[var]][["unique.values"]],
+                         engine[[var]][["type"]], length(newdata[, var]))
+        adapt[, var] <-
+          decodeDiscrete(adapt[, var], engine[[var]][["unique.values"]],
+                         engine[[var]][["type"]], length(adapt[, var]))
+      }
+      
     }
   }
 
   adapt
+}
+
+#' Quality of quantile fit statistics.
+#'
+#' @param x Object of class `fairadapt`, a result of an adaptation
+#' procedure.
+#' @param ... Ignored in this case.
+#' @return A `numeric` vector, containing the average empirical loss for
+#' the 25%, 50% and 75% quantile loss functions, for each variable. 
+#' @examples
+#' n_samp <- 200
+#' uni_dim <- c(       "gender", "edu", "test", "score")
+#' uni_adj <- matrix(c(       0,     1,      1,       0,
+#'                            0,     0,      1,       1,
+#'                            0,     0,      0,       1,
+#'                            0,     0,      0,       0),
+#'                   ncol = length(uni_dim),
+#'                   dimnames = rep(list(uni_dim), 2),
+#'                   byrow = TRUE)
+#'
+#' uni_ada <- fairadapt(score ~ .,
+#'   train.data = head(uni_admission, n = n_samp),
+#'   test.data = tail(uni_admission, n = n_samp),
+#'   adj.mat = uni_adj,
+#'   prot.attr = "gender",
+#'   eval.qfit = 3L
+#' )
+#'
+#' quantFit(uni_ada)
+#' @export
+quantFit <- function(x, ...) {
+  UseMethod("quantFit", x)
+}
+
+#' @export
+quantFit.fairadapt <- function(x, ...) {
+  
+  qfit <- lapply(x$q.engine, `[[`, "qfit.score")
+
+  assert_that(
+    !is.null(qfit[[1L]]),
+    msg = paste(
+      "Run `fairadapt()` with `eval.qfit` equal to a positive integer",
+      "to inspect quality of the fit."
+    )
+  )
+
+  vapply(x$q.engine, `[[`, numeric(1L), "qfit.score")
 }
