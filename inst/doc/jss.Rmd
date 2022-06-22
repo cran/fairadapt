@@ -49,7 +49,7 @@ preamble: >
   \renewcommand{\tilde}[1]{ {#1}^{(fp)}}
   \def\ci{{\perp\!\!\!\perp}}
 vignette: >
-  %\VignetteIndexEntry{Fair Data Adaptation (Plecko et al., JSS 2021)}
+  %\VignetteIndexEntry{fairadapt: Causal Reasoning for Fair Data Pre-processing}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
 output: >
@@ -82,11 +82,12 @@ options(
   kableExtra.latex.load_packages = FALSE
 )
 
-quick_build <- !identical(Sys.getenv("NOT_CRAN"), "true") ||
+quick_build <- quick_build <- !identical(Sys.getenv("NOT_CRAN"), "true") ||
   isTRUE(as.logical(Sys.getenv("CI"))) ||
   !identical(Sys.getenv("FAIRADAPT_VIGNETTE_QUICK_BUILD"), "false")
 
 is_on_cran <- !identical(Sys.getenv("NOT_CRAN"), "true")
+run_sim <- FALSE
 ```
 
 ```{tikz, setup-graph, eval = FALSE, echo = FALSE}
@@ -439,6 +440,7 @@ uni_adj <- matrix(c(       0,     1,      1,       0,
                   dimnames = rep(list(uni_dim), 2),
                   byrow = TRUE)
 
+set.seed(2022)
 basic <- fairadapt(score ~ ., train.data = uni_trn,
                     test.data = uni_tst, adj.mat = uni_adj,
                     prot.attr = "gender")
@@ -513,7 +515,7 @@ linebreak <- function(..., align = c("l", "c", "r"), linebreaker = "\n") {
 
 bm_cache <- system.file("extdata", "bm_quant.rds", package = "fairadapt")
 
-if (quick_build && file.exists(bm_cache)) {
+if (!run_sim && file.exists(bm_cache)) {
 
   bmark <- readRDS(bm_cache)
 
@@ -576,7 +578,10 @@ capt <- paste(
   "of samples, $p$ number of covariates, $n_{\\text{epochs}}$ number of",
   "training epochs for the neural network. $T_{\\text{uni}}(n)$ denotes the",
   "runtime of different methods on the university admission dataset, with $n$",
-  "training and $n$ testing samples."
+  "training and $n$ testing samples. The runtimes were obtained on a system", 
+  "with Intel Core i7-8750H CPU @ 2.2GHz running MacOS Big Sur 11.6.",
+  "The version of R was 4.2.0 \"Vigorous Calisthenics\" with \\pkg{quantreg}", 
+  "version 5.93, \\pkg{ranger} version 0.13.1, and \\pkg{mcqrnn} version 2.0.5."
 )
 
 print(
@@ -622,6 +627,7 @@ A smaller empirical loss based on Equation \eqref{eq:quantloss} corresponds to b
 We compute the average empirical loss $\widehat{\ex} [\rho_{\tau} (V_i, \mu_{\tau}(\pa(V_i)))]$ for each variable $V_i$ and $\tau = 0.25, 0.5, 0.75$ (corresponding to 25\%, 50\% and 75\% quantiles). The average of these three values is reported at the end, and can be extracted from the resulting `fairadapt` object using the `quantFit()` method:
 
 ```{r, quantFit}
+set.seed(22)
 fit_qual <- fairadapt(score ~ ., train.data = uni_trn,
                       adj.mat = uni_adj, prot.attr = "gender",
                       eval.qfit = 3L)
@@ -798,10 +804,10 @@ The COMPAS dataset contains information on 7214 individuals from Broward County,
 After loading the dataset, we run the `fairadaptBoot()` function twice, with two different values of the `rand.mode` argument. First, we consider only the finite sample uncertainty.
 
 ```{r, compas-boot-quick, eval = quick_build, echo = quick_build}
-cmp_trn <- tail(cmp_dat, n = 700L)
+cmp_trn <- tail(cmp_dat, n = 100L)
 cmp_tst <- head(cmp_dat, n = 100L)
 
-n_itr <- 5L
+n_itr <- 3L
 ```
 
 ```{r, compas-boot-slow, eval = !quick_build, echo = !quick_build}
@@ -1183,7 +1189,7 @@ ggraph(gov_tmp, "igraph", algorithm = "fr") +
 Before applying `fairadapt()`, we first log-transform the salaries. We then inspect the densities of variable `salary` by sex group, as shown in Figure \ref{fig:census-vis}A. There is a clear shift between the two distributions, indicating that `male` employees are better compensated than `female` employees. We perform the adaptation by using `n_samp` samples for training and `n_pred` samples for testing.
 
 ```{r, log-sub-quick, eval = quick_build, echo = quick_build}
-n_samp <- 3000
+n_samp <- 750
 n_pred <- 5
 ```
 
@@ -1198,6 +1204,7 @@ gov_dat$salary <- log(gov_dat$salary)
 gov_trn <- head(gov_dat, n = n_samp)
 gov_prd <- tail(gov_dat, n = n_pred)
 
+set.seed(22)
 gov_ada <- fairadapt(salary ~ ., train.data = gov_trn,
                      adj.mat = gov_adj, prot.attr = prt)
 ```
@@ -1226,6 +1233,7 @@ cowplot::plot_grid(panels, legend_join, ncol = 1, rel_heights = c(1, .08))
 For adapting additional testing data, we use the base \proglang{R} S3 generic function `predict()`:
 
 ```{r, census-predict}
+set.seed(2022)
 predict(gov_ada, newdata = gov_prd)
 ```
 

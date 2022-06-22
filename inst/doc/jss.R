@@ -17,11 +17,12 @@ options(
   kableExtra.latex.load_packages = FALSE
 )
 
-quick_build <- !identical(Sys.getenv("NOT_CRAN"), "true") ||
+quick_build <- quick_build <- !identical(Sys.getenv("NOT_CRAN"), "true") ||
   isTRUE(as.logical(Sys.getenv("CI"))) ||
   !identical(Sys.getenv("FAIRADAPT_VIGNETTE_QUICK_BUILD"), "false")
 
 is_on_cran <- !identical(Sys.getenv("NOT_CRAN"), "true")
+run_sim <- FALSE
 
 ## ---- basic---------------------------------------------------------
 n_samp <- 200
@@ -43,6 +44,7 @@ uni_adj <- matrix(c(       0,     1,      1,       0,
                   dimnames = rep(list(uni_dim), 2),
                   byrow = TRUE)
 
+set.seed(2022)
 basic <- fairadapt(score ~ ., train.data = uni_trn,
                     test.data = uni_tst, adj.mat = uni_adj,
                     prot.attr = "gender")
@@ -86,7 +88,7 @@ linebreak <- function(..., align = c("l", "c", "r"), linebreaker = "\n") {
 
 bm_cache <- system.file("extdata", "bm_quant.rds", package = "fairadapt")
 
-if (quick_build && file.exists(bm_cache)) {
+if (!run_sim && file.exists(bm_cache)) {
 
   bmark <- readRDS(bm_cache)
 
@@ -149,7 +151,10 @@ capt <- paste(
   "of samples, $p$ number of covariates, $n_{\\text{epochs}}$ number of",
   "training epochs for the neural network. $T_{\\text{uni}}(n)$ denotes the",
   "runtime of different methods on the university admission dataset, with $n$",
-  "training and $n$ testing samples."
+  "training and $n$ testing samples. The runtimes were obtained on a system", 
+  "with Intel Core i7-8750H CPU @ 2.2GHz running MacOS Big Sur 11.6.",
+  "The version of R was 4.2.0 \"Vigorous Calisthenics\" with \\pkg{quantreg}", 
+  "version 5.93, \\pkg{ranger} version 0.13.1, and \\pkg{mcqrnn} version 2.0.5."
 )
 
 print(
@@ -162,6 +167,7 @@ print(
 )
 
 ## ---- quantFit------------------------------------------------------
+set.seed(22)
 fit_qual <- fairadapt(score ~ ., train.data = uni_trn,
                       adj.mat = uni_adj, prot.attr = "gender",
                       eval.qfit = 3L)
@@ -191,10 +197,10 @@ cmp_mat["c_charge_degree", "two_year_recid"] <- 1
 head(cmp_dat)
 
 ## ---- compas-boot-quick, eval = quick_build, echo = quick_build-----
-cmp_trn <- tail(cmp_dat, n = 700L)
+cmp_trn <- tail(cmp_dat, n = 100L)
 cmp_tst <- head(cmp_dat, n = 100L)
 
-n_itr <- 5L
+n_itr <- 3L
 
 ## ---- compas-boot-slow, eval = !quick_build, echo = !quick_build----
 #  cmp_trn <- tail(cmp_dat, n = 6000L)
@@ -474,7 +480,7 @@ ggraph(gov_tmp, "igraph", algorithm = "fr") +
   coord_cartesian(clip = "off")
 
 ## ---- log-sub-quick, eval = quick_build, echo = quick_build---------
-n_samp <- 3000
+n_samp <- 750
 n_pred <- 5
 
 ## ---- log-sub-slow, eval = !quick_build, echo = !quick_build--------
@@ -487,6 +493,7 @@ gov_dat$salary <- log(gov_dat$salary)
 gov_trn <- head(gov_dat, n = n_samp)
 gov_prd <- tail(gov_dat, n = n_pred)
 
+set.seed(22)
 gov_ada <- fairadapt(salary ~ ., train.data = gov_trn,
                      adj.mat = gov_adj, prot.attr = prt)
 
@@ -511,6 +518,7 @@ panels <- cowplot::plot_grid(
 cowplot::plot_grid(panels, legend_join, ncol = 1, rel_heights = c(1, .08))
 
 ## ---- census-predict------------------------------------------------
+set.seed(2022)
 predict(gov_ada, newdata = gov_prd)
 
 ## ---- census-twins--------------------------------------------------
