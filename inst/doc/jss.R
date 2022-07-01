@@ -115,7 +115,7 @@ if (!run_sim && file.exists(bm_cache)) {
 
   bmark <- do.call(cbind, bmark)
 
-  colnames(bmark) <- c("Random Forests", "Neural Networks", "Linear Regression")
+  colnames(bmark) <- c("Random forest", "Neural network", "Linear regression")
   rownames(bmark) <- as.character(nsamps)
 
   saveRDS(bmark, file.path("..", "inst", "extdata", "bm_quant.rds"))
@@ -140,8 +140,8 @@ tbl <- data.frame(
 
 colnames(tbl) <- colnames(bmark)
 rownames(tbl) <- linebreak(
-  "\\proglang{R}-package", "\\texttt{quant.method}", "complexity",
-  "default\nparameters"
+  "\\proglang{R}-package", "\\texttt{quant.method}", "Complexity",
+  "Default\nparameters"
 )
 
 tbl <- rbind(tbl, bmark)
@@ -153,7 +153,7 @@ capt <- paste(
   "runtime of different methods on the university admission dataset, with $n$",
   "training and $n$ testing samples. The runtimes were obtained on a system", 
   "with Intel Core i7-8750H CPU @ 2.2GHz running MacOS Big Sur 11.6.",
-  "The version of R was 4.2.0 \"Vigorous Calisthenics\" with \\pkg{quantreg}", 
+  "The version of \\proglang{R} was 4.2.0 \"Vigorous Calisthenics\" with \\pkg{quantreg}", 
   "version 5.93, \\pkg{ranger} version 0.13.1, and \\pkg{mcqrnn} version 2.0.5."
 )
 

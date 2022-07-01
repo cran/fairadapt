@@ -1,4 +1,4 @@
-2d2b4b0cc3f136f9f1ddd8723e02c48d *DESCRIPTION
+c921a53b8ad8b14b71ff813168309e4f *DESCRIPTION
 8be81f33de202ddd97da65f922eddbdd *NAMESPACE
 d3792bcf9eaac682ff94bf58870fc976 *NEWS.md
 662540438a6a93d20129d5e2ac456346 *R/boot.R
@@ -16,10 +16,10 @@ e6153b4509d6cd574fce5cab3371ac2b *README.md
 f2a72dbeb6b94c1e0272e5f259c390f1 *data/gov_census.rda
 87de94b26468f04ba9798870c4f3ad9b *data/uni_admission.rda
 bff9830addae6b342466aa674dccb324 *inst/CITATION
-03cc1040ec31193b7e44e405b907cffd *inst/doc/jss.R
-dac1548a733121f1932c5a1793c44f72 *inst/doc/jss.Rmd
-d64c81a0504ae2f60ddd5c6c3058dc75 *inst/doc/jss.pdf
-2bc444bbc4a769099c3c30b1dbc92f28 *inst/extdata/bm_quant.rds
+979f3dc459139c4fb1d239f126deb6b8 *inst/doc/jss.R
+5ec5a79ce608fe1b7e9502c5c459b60c *inst/doc/jss.Rmd
+e24dd3ceae9f4333e80fe9ab992d4108 *inst/doc/jss.pdf
+d2957929c58a7924d4914499ec1c6c4d *inst/extdata/bm_quant.rds
 d06375c5adfbd7c25c19cc00e70c15a6 *inst/extdata/uci_adult.rds
 40442d37f4ed700696ed4ba3add9d075 *inst/testdata/compas-scores-two-years.rds
 9a2cadb9dc788b9a9362c5ca6dd753ba *man/adaptedData.Rd
@@ -67,6 +67,7 @@ f580443fcf8d36b2775f0fa6ba3fe449 *tests/testthat/test-boot.R
 6a4847c838ece8a4bbafe66c6afce780 *tests/testthat/test-generics.R
 181aea416344e19d0b7317e68db31b4a *tests/testthat/test-graphs.R
 437ce3f388c1251cdf091de8d5eddf13 *tests/testthat/test-utils.R
-dac1548a733121f1932c5a1793c44f72 *vignettes/jss.Rmd
-848951e189e5ea265b855928be29e45e *vignettes/jss.bib
+5ec5a79ce608fe1b7e9502c5c459b60c *vignettes/jss.Rmd
+500db8320396ccc7538ee990a1a90aca *vignettes/jss.bib
 b9564ddd59a06782310989e8f33db55e *vignettes/jsslogo.jpg
+1b096547954cd650853aa0db0331fbb5 *vignettes/tmp-pdfcrop-11092.tex
