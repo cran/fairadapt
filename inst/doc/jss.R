@@ -17,7 +17,7 @@ options(
   kableExtra.latex.load_packages = FALSE
 )
 
-quick_build <- quick_build <- !identical(Sys.getenv("NOT_CRAN"), "true") ||
+quick_build <- !identical(Sys.getenv("NOT_CRAN"), "true") ||
   isTRUE(as.logical(Sys.getenv("CI"))) ||
   !identical(Sys.getenv("FAIRADAPT_VIGNETTE_QUICK_BUILD"), "false")
 
@@ -25,7 +25,7 @@ is_on_cran <- !identical(Sys.getenv("NOT_CRAN"), "true")
 run_sim <- FALSE
 
 ## ---- basic---------------------------------------------------------
-n_samp <- 200
+n_samp <- 500
 
 uni_dat <- data("uni_admission", package = "fairadapt")
 uni_dat <- uni_admission[seq_len(2 * n_samp), ]
@@ -50,6 +50,12 @@ basic <- fairadapt(score ~ ., train.data = uni_trn,
                     prot.attr = "gender")
 
 basic
+
+## ----fairadapt-summary----------------------------------------------
+summary(basic)
+
+## ----adapted-data-example-------------------------------------------
+head(adaptedData(basic, train = FALSE))
 
 ## ---- graph-model---------------------------------------------------
 uni_graph <- graphModel(uni_adj)
@@ -202,17 +208,21 @@ cmp_tst <- head(cmp_dat, n = 100L)
 
 n_itr <- 3L
 
+set.seed(2022)
+fa_boot_fin <- fairadaptBoot(two_year_recid ~ ., "race", cmp_mat,
+                             cmp_trn, cmp_tst, rand.mode = "finsamp",
+                             n.boot = n_itr)
+
 ## ---- compas-boot-slow, eval = !quick_build, echo = !quick_build----
 #  cmp_trn <- tail(cmp_dat, n = 6000L)
 #  cmp_tst <- head(cmp_dat, n = 1214L)
 #  
 #  n_itr <- 50L
-
-## ---- compas-boot-finite--------------------------------------------
-set.seed(2022)
-fa_boot_fin <- fairadaptBoot(two_year_recid ~ ., "race", cmp_mat,
-                             cmp_trn, cmp_tst, rand.mode = "finsamp",
-                             n.boot = n_itr)
+#  
+#  set.seed(2022)
+#  fa_boot_fin <- fairadaptBoot(two_year_recid ~ ., "race", cmp_mat,
+#                               cmp_trn, cmp_tst, rand.mode = "finsamp",
+#                               n.boot = n_itr)
 
 ## ---- compas-boot-quant---------------------------------------------
 set.seed(2022)
@@ -392,8 +402,6 @@ ggplot(ind_prb, aes(x = prob, group = individual,
 gov_dat <- data("gov_census", package = "fairadapt")
 gov_dat <- get(gov_dat)
 
-head(gov_dat)
-
 dem <- c("age", "race", "hispanic_origin", "citizenship",
          "nativity", "economic_region")
 fam <- c("marital", "family_size", "children")
@@ -495,7 +503,8 @@ gov_prd <- tail(gov_dat, n = n_pred)
 
 set.seed(22)
 gov_ada <- fairadapt(salary ~ ., train.data = gov_trn,
-                     adj.mat = gov_adj, prot.attr = prt)
+                     adj.mat = gov_adj, cfd.mat = gov_cfd,
+                     prot.attr = prt)
 
 ## ---- census-vis, echo = FALSE, fig.width = 7, fig.height = 3, fig.cap = "Visualization of salary densities grouped by employee sex, before (panel A) and after adaptation (panel B). Panel A indicates a shift towards higher values for male employees. In panel B, after the data is transformed, the gap between groups is reduced.", cache = TRUE----
 
@@ -519,15 +528,18 @@ cowplot::plot_grid(panels, legend_join, ncol = 1, rel_heights = c(1, .08))
 
 ## ---- census-predict------------------------------------------------
 set.seed(2022)
-predict(gov_ada, newdata = gov_prd)
+gov_prd_ada <- predict(gov_ada, newdata = gov_prd)
+gov_prd_ada[, c("sex", "age", "education_level", "salary")]
 
 ## ---- census-twins--------------------------------------------------
 fairTwins(gov_ada, train.id = 1:5,
-          cols = c("sex", "age", "education_level", "salary"))
+          cols = c("sex", "age", "salary"))
 
 ## ---- res-uni-------------------------------------------------------
-fairadapt(score ~ ., train.data = uni_trn, test.data = uni_tst,
-          adj.mat = uni_adj, prot.attr = "gender", res.vars = "test")
+res_basic <- fairadapt(score ~ ., train.data = uni_trn, 
+                       test.data = uni_tst, adj.mat = uni_adj, 
+                       prot.attr = "gender", res.vars = "test")
+summary(res_basic)
 
 ## ---- res-assign----------------------------------------------------
 uni_res <- graphModel(uni_adj, res.vars = "test")
@@ -559,8 +571,8 @@ uni_cfd["test", "score"] <- 1
 uni_cfd["score", "test"] <- 1
 
 semi <- fairadapt(score ~ ., train.data = uni_trn,
-                  test.data = uni_tst, adj.mat = uni_adj,
-                  cfd.mat = uni_cfd, prot.attr = "gender")
+                   test.data = uni_tst, adj.mat = uni_adj,
+                   cfd.mat = uni_cfd, prot.attr = "gender")
 
 ## ---- semi-graph, echo = FALSE, fig.width = 6, fig.height = 3, fig.cap = "Visualization of the causal graphical model also shown in Figure \\ref{fig:semi-markov}, obtained when passing a confounding matrix indicating a bidirected edge between vertices \\texttt{test} and \\texttt{score} to \\texttt{fairadapt()}. The resulting Semi-Markovian model can also be handled by \\texttt{fairadapt()}, extending the basic Markovian formulation introduced in Section \\ref{markovian-scm-formulation}.", out.width = "60%"----
 
@@ -589,6 +601,14 @@ ggraph(semi$graph, "igraph", algorithm = "fr") +
         axis.text = element_blank(), axis.line = element_blank(),
         axis.ticks = element_blank(), panel.grid = element_blank()) +
   coord_cartesian(clip = "off")
+
+## ----top-ord--------------------------------------------------------
+set.seed(2022)
+top_ord <- fairadapt(score ~ ., train.data = uni_trn, test.data = uni_tst, 
+                      top.ord = c("gender", "edu", "test", "score"),
+                      prot.attr = "gender")
+
+summary(top_ord)
 
 ## ----session-info, include = FALSE----------------------------------
 sessionInfo()
