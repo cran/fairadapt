@@ -203,26 +203,26 @@ cmp_mat["c_charge_degree", "two_year_recid"] <- 1
 head(cmp_dat)
 
 ## ---- compas-boot-quick, eval = quick_build, echo = quick_build-----
-cmp_trn <- tail(cmp_dat, n = 100L)
-cmp_tst <- head(cmp_dat, n = 100L)
-
-n_itr <- 3L
-
-set.seed(2022)
-fa_boot_fin <- fairadaptBoot(two_year_recid ~ ., "race", cmp_mat,
-                             cmp_trn, cmp_tst, rand.mode = "finsamp",
-                             n.boot = n_itr)
-
-## ---- compas-boot-slow, eval = !quick_build, echo = !quick_build----
-#  cmp_trn <- tail(cmp_dat, n = 6000L)
-#  cmp_tst <- head(cmp_dat, n = 1214L)
+#  cmp_trn <- tail(cmp_dat, n = 100L)
+#  cmp_tst <- head(cmp_dat, n = 100L)
 #  
-#  n_itr <- 50L
+#  n_itr <- 3L
 #  
 #  set.seed(2022)
 #  fa_boot_fin <- fairadaptBoot(two_year_recid ~ ., "race", cmp_mat,
 #                               cmp_trn, cmp_tst, rand.mode = "finsamp",
 #                               n.boot = n_itr)
+
+## ---- compas-boot-slow, eval = !quick_build, echo = !quick_build----
+cmp_trn <- tail(cmp_dat, n = 6000L)
+cmp_tst <- head(cmp_dat, n = 1214L)
+
+n_itr <- 50L
+
+set.seed(2022)
+fa_boot_fin <- fairadaptBoot(two_year_recid ~ ., "race", cmp_mat,
+                             cmp_trn, cmp_tst, rand.mode = "finsamp",
+                             n.boot = n_itr)
 
 ## ---- compas-boot-quant---------------------------------------------
 set.seed(2022)
@@ -281,7 +281,7 @@ ord_ind <- function(x, modes = "single") {
   res <- replicate(5000L, {
     row <- sample(nrow(x), 2)
     ord <- mean(x[row[1], ] > x[row[2], ])
-    max(ord, 1 - ord)
+    ord^2 + (1 - ord)^2
   })
 
   data.frame(res = res, mode = modes)
@@ -316,7 +316,7 @@ prb_frm <- function(x, modes = "single") {
 prb_df <- rbind(prb_frm(pred_fin, "Finite Sample"),
                 prb_frm(pred_quant, "Quantiles"))
 
-## ---- compas-dm, echo = FALSE, fig.width = 8, fig.height = 6, fig.cap = "Analyzing uncertainty of predictions in the COMPAS dataset from decision-maker's point of view. Panel A shows how the Jaccard similarity of two repetitions varies depending on the decision threshold. Panel B shows the cumulative distribution of the random variable that indicates whether two randomly selected individuals preserve order (in terms of predicted probabilities) in bootstrap repetitions. Panel C shows the density of the normalized inversion number of between predicted probabilities in bootstrap repetitions. Panel D shows the cumulative distribution function of the 95\\% confidence interval (CI) width for the predicted probability of different individuals.", out.width = "100%"----
+## ---- compas-dm, echo = FALSE, fig.width = 8, fig.height = 6, warning = FALSE, fig.cap = "Analyzing uncertainty of predictions in the COMPAS dataset from decision-maker's point of view. Panel A shows how the Jaccard similarity of two repetitions varies depending on the decision threshold. Panel B shows the cumulative distribution of the random variable that indicates whether two randomly selected individuals preserve order (in terms of predicted probabilities) in bootstrap repetitions. Panel C shows the density of the normalized inversion number of between predicted probabilities in bootstrap repetitions. Panel D shows the cumulative distribution function of the 95\\% confidence interval (CI) width for the predicted probability of different individuals.", out.width = "100%"----
 
 p1 <- ggplot(jac_df, aes(x = tsh, y = y, color = mode)) +
   geom_point() +
@@ -327,7 +327,8 @@ p1 <- ggplot(jac_df, aes(x = tsh, y = y, color = mode)) +
   xlab("Decision threshold") +
   ylab("Jaccard similarity") +
   theme(
-    legend.position = c(0.3, 0.3),
+    legend.position = "inside",
+    legend.position.inside = c(0.3, 0.3),
     legend.box.background = element_rect()
   ) +
   scale_color_discrete(labels = c(" \"finsamp\" ", " \"quant\" "),
@@ -341,7 +342,8 @@ p2 <- ggplot(ord_df, aes(x = res, color = mode)) +
   xlab("Probability of preserving ordering") +
   ylab("Cumulative proportion") +
   theme(
-    legend.position = c(0.3, 0.7),
+    legend.position = "inside",
+    legend.position.inside = c(0.3, 0.7),
     legend.box.background = element_rect()
   ) +
   scale_color_discrete(labels = c(" \"finsamp\" ", " \"quant\" "),
@@ -354,7 +356,8 @@ p3 <- ggplot(inv_df, aes(x = res, fill = mode)) +
   xlab("Normalized inversion number") +
   ylab("Density") +
   theme(
-    legend.position = c(0.3, 0.7),
+    legend.position = "inside",
+    legend.position.inside = c(0.3, 0.7),
     legend.box.background = element_rect()
   ) +
   scale_fill_discrete(labels = c(" \"finsamp\" ", " \"quant\" "),
@@ -366,7 +369,8 @@ p4 <- ggplot(prb_df, aes(x = width, color = mode)) +
   xlab("95% CI width") +
   ylab("Cumulative probability") +
   theme(
-    legend.position = c(0.3, 0.7),
+    legend.position = "inside",
+    legend.position.inside = c(0.3, 0.7),
     legend.box.background = element_rect()
   ) +
   scale_x_reverse() +
@@ -394,7 +398,8 @@ ggplot(ind_prb, aes(x = prob, group = individual,
   theme_bw() +
   xlim(0, 1) +
   theme(
-    legend.position = c(0.7, 0.75),
+    legend.position = "inside",
+    legend.position.inside = c(0.7, 0.75),
     legend.box.background = element_rect()
   )
 
@@ -477,7 +482,6 @@ ggraph(gov_tmp, "igraph", algorithm = "fr") +
                  linetype = "solid") +
   geom_node_point(aes(color = color), size = 15) +
   geom_node_text(aes(x = x, y = y, label = name), size = 5) +
-  scale_edge_linetype_manual(values = c(dashed = "dashed", solid = "solid")) +
   scale_color_discrete(name = "Grouping") +
   theme_bw() +
   theme(plot.margin = margin(30, 30, 30, 30), legend.position = "bottom",
@@ -488,12 +492,12 @@ ggraph(gov_tmp, "igraph", algorithm = "fr") +
   coord_cartesian(clip = "off")
 
 ## ---- log-sub-quick, eval = quick_build, echo = quick_build---------
-n_samp <- 750
-n_pred <- 5
+#  n_samp <- 750
+#  n_pred <- 5
 
 ## ---- log-sub-slow, eval = !quick_build, echo = !quick_build--------
-#  n_samp <- 30000
-#  n_pred <- 5
+n_samp <- 30000
+n_pred <- 5
 
 ## ---- census-adapt--------------------------------------------------
 gov_dat$salary <- log(gov_dat$salary)
@@ -515,9 +519,10 @@ p1 <- ggplot(gov_trn, aes(x = salary, fill = sex)) +
 p2 <- autoplot(gov_ada, when = "after") +
   theme_bw() + ggtitle(NULL)
 
-legend_join <- cowplot::get_legend(
+legend_join <- cowplot::get_plot_component(
   p1 + guides(color = guide_legend(nrow = 1)) +
-    theme(legend.position = "bottom")
+    theme(legend.position = "bottom"),
+    "guide-box-bottom", return_all = TRUE
 )
 
 panels <- cowplot::plot_grid(
@@ -544,7 +549,7 @@ summary(res_basic)
 ## ---- res-assign----------------------------------------------------
 uni_res <- graphModel(uni_adj, res.vars = "test")
 
-## ---- res-graph, echo = FALSE, fig.width = 6, fig.height = 3, fig.cap = "Visualization of the causal graph corresponding to the university admissions example introduced in Section \\ref{introduction} with the variable \\texttt{test} chosen as a \\textit{resolving variable} and therefore highlighted in red.", out.width = "60%"----
+## ---- res-graph, echo = FALSE, fig.width = 6, fig.height = 3, fig.cap = "Visualization of the causal graph corresponding to the university admissions example introduced in Section \\ref{methodology} with the variable \\texttt{test} chosen as a \\textit{resolving variable} and therefore highlighted in red.", out.width = "60%"----
 
 set.seed(11)
 
